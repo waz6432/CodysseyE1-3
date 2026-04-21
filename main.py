@@ -30,52 +30,89 @@ def run_mode_2():
     filters = data.get('filters', {})
     patterns = data.get('patterns', {})
     
-    results = []
-    performance_data = []
+    # --- [1] 필터 로드 섹션 ---
+    print("\n#" + "-"*40)
+    print("# [1] 필터 로드")
+    print("#" + "-"*40)
+    for size in [5, 13, 25]:
+        if f"size_{size}" in filters:
+            print(f"✓ size_{size} 필터 로드 완료 (Cross, X)")
 
-    print("\n--- [모드 2] JSON 데이터 분석 ---")
+    # --- [2] 패턴 분석 섹션 ---
+    print("\n#" + "-"*40)
+    print("# [2] 패턴 분석 (라벨 정규화 적용)")
+    print("#" + "-"*40)
+    
+    results = []
+    performance_records = []
+
     for key, item in patterns.items():
         try:
-            # 키에서 사이즈 추출 (예: size_5_1 -> size_5)
-            size_key = f"size_{key.split('_')[1]}"
+            size_val = key.split('_')[1]
+            size_key = f"size_{size_val}"
             pattern_data = item['input']
             expected = normalize_label(item['expected'])
-            
-            # 필터 선택 (해당 사이즈의 cross와 x 필터)
             f_cross = filters[size_key]['cross']
             f_x = filters[size_key]['x']
 
-            # 크기 검증
-            if len(pattern_data) != len(f_cross):
-                results.append({'id': key, 'result': 'FAIL', 'reason': 'Size Mismatch'})
-                continue
-
-            # 연산
+            # MAC 연산 및 시간 측정
             s_cross = calculate_mac(pattern_data, f_cross)
             s_x = calculate_mac(pattern_data, f_x)
             
             winner_node = compare_scores(s_cross, s_x)
             actual = get_standard_decision(winner_node, s_cross, s_x)
-            
             status = "PASS" if actual == expected else "FAIL"
-            results.append({'id': key, 'result': status, 'actual': actual, 'expected': expected})
             
-            # 성능 데이터 저장 (사이즈별)
-            performance_data.append({'size': len(pattern_data), 'time': measure_average_time(pattern_data, f_cross)})
+            # 케이스별 상세 출력 (이미지 스타일)
+            print(f"- -- {key} ---")
+            print(f"Cross 점수: {s_cross}")
+            print(f"X 점수: {s_x}")
+            
+            fail_reason = ""
+            if winner_node == "UNDECIDED":
+                fail_reason = " (동점 규칙)"
+            
+            print(f"판정: {actual} | expected: {expected} | {status}{fail_reason}")
+            
+            results.append({'id': key, 'result': status, 'actual': actual, 'expected': expected, 'reason': fail_reason})
+            performance_records.append({'size': int(size_val), 'time': measure_average_time(pattern_data, f_cross)})
 
         except Exception as e:
+            print(f"- -- {key} --- 에러 발생: {e}")
             results.append({'id': key, 'result': 'FAIL', 'reason': str(e)})
 
-    # 결과 요약 출력
+    # --- [3] 성능 분석 섹션 ---
+    print("\n#" + "-"*40)
+    print("# [3] 성능 분석 (평균/10회)")
+    print("#" + "-"*40)
+    print(f"{'크기':<10} {'평균 시간(ms)':<15} {'연산 횟수':<10}")
+    print("-" * 40)
+    
+    unique_sizes = sorted(list(set(r['size'] for r in performance_records)))
+    # 3x3은 사용자 입력 모드에서 측정된 값을 쓰거나 별도 테스트 데이터를 통해 출력
+    for size in unique_sizes:
+        times = [r['time'] for r in performance_records if r['size'] == size]
+        avg_time = sum(times) / len(times)
+        print(f"{size}x{size:<7} {avg_time:<15.3f} {size*size:<10}")
+
+    # --- [4] 결과 요약 섹션 ---
+    print("\n#" + "-"*40)
+    print("# [4] 결과 요약")
+    print("#" + "-"*40)
     total = len(results)
     pass_cnt = sum(1 for r in results if r['result'] == 'PASS')
-    print(f"\n[전체 리포트] 총계: {total} | 통과: {pass_cnt} | 실패: {total - pass_cnt}")
+    fail_cnt = total - pass_cnt
     
-    if total - pass_cnt > 0:
-        print("- 실패 케이스 목록:")
+    print(f"총 테스트: {total}개")
+    print(f"통과: {pass_cnt}개")
+    print(f"실패: {fail_cnt}개")
+    
+    if fail_cnt > 0:
+        print("\n실패 케이스:")
         for r in results:
             if r['result'] == 'FAIL':
-                print(f"  * {r['id']}: {r.get('reason', 'Label Mismatch')}")
+                reason_msg = "동점(UNDECIDED) 처리 규칙에 따라 FAIL" if "동점" in r['reason'] else r['reason']
+                print(f"- {r['id']}: {reason_msg}")
 
 def main():
     while True:
